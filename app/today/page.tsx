@@ -2,11 +2,18 @@
 
 import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { addDays, format, parseISO, subDays } from 'date-fns'
+import { addDays, format, isSameDay, parseISO, subDays } from 'date-fns'
 import { Line, LineChart, ResponsiveContainer, YAxis } from 'recharts'
-import { Settings } from 'lucide-react'
-import { useAppState } from '@/state/AppStateContext'
-import { average, detectFlares, getCycleDay, getCyclePhase, getLoggingStreak } from '@/state/selectors'
+import { Check, Settings } from 'lucide-react'
+import { useAppDispatch, useAppState } from '@/state/AppStateContext'
+import {
+  average,
+  detectFlares,
+  getCycleDay,
+  getCyclePhase,
+  getLoggingStreak,
+  isMedicationDueToday,
+} from '@/state/selectors'
 import Button from '@/components/Button'
 import Card from '@/components/Card'
 import MetricTile from '@/components/MetricTile'
@@ -23,7 +30,8 @@ function capitalize(s: string): string {
 
 export default function Today() {
   const router = useRouter()
-  const { symptomEntries, cycleEvents } = useAppState()
+  const { symptomEntries, cycleEvents, medications, medicationDoses } = useAppState()
+  const dispatch = useAppDispatch()
 
   const today = useMemo(() => new Date(), [])
   const todayStr = isoDate(today)
@@ -50,6 +58,28 @@ export default function Today() {
       }),
     [symptomEntries, today],
   )
+
+  const dueMedications = useMemo(
+    () => medications.filter((m) => isMedicationDueToday(m, today)),
+    [medications, today],
+  )
+
+  function isTakenToday(medicationId: string): boolean {
+    return medicationDoses.some(
+      (d) => d.medicationId === medicationId && isSameDay(parseISO(d.takenAt), today),
+    )
+  }
+
+  function markTaken(medicationId: string) {
+    dispatch({
+      type: 'LOG_MEDICATION_DOSE',
+      dose: {
+        id: `dose-${medicationId}-${todayStr}`,
+        medicationId,
+        takenAt: new Date().toISOString(),
+      },
+    })
+  }
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-8">
@@ -83,11 +113,14 @@ export default function Today() {
 
       <div className="flex flex-col gap-2">
         <SectionHeader title="Last 7 days" />
+        <p className="-mt-2 text-label text-vyr-textMute">
+          Average severity across everything logged each day, 0–10
+        </p>
         <Card>
           <div className="h-24 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={sparklineData}>
-                <YAxis domain={[0, 10]} hide />
+                <YAxis domain={[0, 10]} tick={{ fontSize: 9 }} width={18} />
                 <Line
                   type="monotone"
                   dataKey="severity"
@@ -99,6 +132,44 @@ export default function Today() {
               </LineChart>
             </ResponsiveContainer>
           </div>
+        </Card>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <SectionHeader title="Medications" />
+        <Card className="flex flex-col gap-3">
+          {dueMedications.length === 0 ? (
+            <p className="text-label text-vyr-textMute">Nothing due today.</p>
+          ) : (
+            dueMedications.map((med, i) => {
+              const taken = isTakenToday(med.id)
+              return (
+                <div key={med.id} className="flex flex-col gap-3">
+                  {i > 0 && <div className="border-t-[0.5px] border-vyr-lavenderPl" />}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-body font-medium text-vyr-purple">{med.name}</p>
+                      <p className="text-label text-vyr-textMute capitalize">{med.cadence}</p>
+                    </div>
+                    {taken ? (
+                      <span className="flex items-center gap-1 text-label font-medium text-vyr-teal">
+                        <Check size={16} />
+                        Taken
+                      </span>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        className="min-h-[36px] px-3 text-label"
+                        onClick={() => markTaken(med.id)}
+                      >
+                        Mark taken
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
         </Card>
       </div>
     </div>

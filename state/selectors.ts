@@ -2,6 +2,7 @@ import { addDays, differenceInCalendarDays, format, parseISO, subDays } from 'da
 import type {
   CareEvent,
   CycleEvent,
+  Medication,
   MedicationDose,
   SymptomEntry,
   UserProfile,
@@ -205,4 +206,30 @@ export function getLoggingStreak(entries: SymptomEntry[], today: Date): number {
     cursor = subDays(cursor, 1)
   }
   return streak
+}
+
+export function isMedicationDueToday(med: Medication, today: Date): boolean {
+  if (!med.active) return false
+  const start = parseISO(med.startedOn)
+  const daysSinceStart = differenceInCalendarDays(today, start)
+  if (daysSinceStart < 0) return false
+
+  switch (med.cadence) {
+    case 'daily':
+      return true
+    case 'weekly':
+      return med.doseDay != null && today.getDay() === med.doseDay
+    case 'biweekly':
+      return (
+        med.doseDay != null &&
+        today.getDay() === med.doseDay &&
+        Math.floor(daysSinceStart / 7) % 2 === 0
+      )
+    case 'monthly':
+      return today.getDate() === start.getDate()
+    case 'as_needed':
+      return false
+    default:
+      return false
+  }
 }
