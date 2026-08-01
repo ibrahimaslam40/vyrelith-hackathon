@@ -349,3 +349,67 @@ Paste this doc into the project, then start with:
 > When done, tell me how to run it locally and confirm every route is reachable.
 
 For each later phase, the same pattern: name the phase, point at the section, forbid running ahead.
+
+---
+
+## 11. Hackathon migration — Next.js + Supabase
+
+This repo (`vyrelith-hackathon`) is a fork of the original Vyrelith POC (Phases 1–6 above, already complete), created to satisfy a hackathon whose technical framework is **Next.js App Router + Supabase**, with the database secret key kept server-side only (per the workshop's `CLASS-GUIDE.md`). The original POC was built as a **Vite SPA with no server runtime** — this section documents what that mismatch requires.
+
+**This reverses a stated hard constraint from §2.** The original POC's non-negotiable was "no `localStorage`, no `sessionStorage`, no `IndexedDB`. All state in memory. Refresh resets to seed." — deliberate, because the demo was meant to stay free of stored health data. The hackathon backend intentionally does the opposite: real persistence, in a real database. That's a conscious reversal for this phase of the project, not an oversight.
+
+### 11.1 What changes (Next.js migration)
+
+| Area | Before (Vite) | After (Next.js) |
+|---|---|---|
+| Framework | Vite + React 18 | Next.js (App Router) + React 18 |
+| Routing | react-router-dom, `src/routes/*.tsx` + `<Routes>` in `App.tsx` | File-based: `app/<route>/page.tsx` |
+| Navigation | `useNavigate()`, `<Link to>` | `useRouter()` / `<Link href>` from `next/navigation`, `next/link` |
+| Tab bar active-route detection | `useLocation()` | `usePathname()` from `next/navigation` |
+| Root wrapper | `Shell` inside `App.tsx` inside `main.tsx` | `app/layout.tsx` (root layout), still wraps `AppStateProvider` + `Shell` |
+| Dev-only console guard | `import.meta.env.DEV` | `process.env.NODE_ENV === 'development'` |
+| SPA fallback routing | `vercel.json` rewrite (`/(.*) → /index.html`) | Not needed — delete `vercel.json` |
+| File structure | `src/{routes,components,data,state,types.ts,utils}` | `app/`, `components/`, `data/`, `state/`, `types.ts`, `utils/` at project root (no `src/`), plus new `lib/supabase.ts` |
+| Build config | `vite.config.ts`, `index.html` | `next.config.js`, no `index.html` |
+| Deps removed | `vite`, `@vitejs/plugin-react`, `react-router-dom` | — |
+| Deps added | — | `next` |
+| Client interactivity | Implicit — everything is client-side in a Vite SPA | Explicit — every component using hooks/state/events needs `"use client"` at the top. In practice this is nearly every existing route, since almost all of them use `useState`/`useReducer`/context. |
+
+**Kept as-is:** TypeScript, Tailwind CSS (same `vyr` palette/config from §3), Recharts, date-fns, lucide-react, html2canvas + jsPDF, the full data model (`types.ts`), the symptom taxonomy (§4), all UI components (`Card`, `Button`, `Chip`, `GroupRow`, etc. — these don't care what router renders them), the derived selectors (`state/selectors.ts`), and the seed generator logic (§7) — at least until Supabase replaces in-memory state in Phase 8.
+
+### 11.2 Route → file mapping
+
+| Old route | New file |
+|---|---|
+| `/` | `app/page.tsx` |
+| `/signin` | `app/signin/page.tsx` |
+| `/signup` | `app/signup/page.tsx` |
+| `/consent` | `app/consent/page.tsx` |
+| `/onboarding` | `app/onboarding/page.tsx` |
+| `/today` | `app/today/page.tsx` |
+| `/log` | `app/log/page.tsx` |
+| `/insights` | `app/insights/page.tsx` |
+| `/insights/cycle` | `app/insights/cycle/page.tsx` |
+| `/insights/photos` | `app/insights/photos/page.tsx` |
+| `/meds` | `app/meds/page.tsx` |
+| `/journey` | `app/journey/page.tsx` |
+| `/journey/summary` | `app/journey/summary/page.tsx` |
+| `/assistant` | `app/assistant/page.tsx` |
+| `/settings` | `app/settings/page.tsx` |
+| `/kitchen-sink` (dev only) | `app/kitchen-sink/page.tsx` — still must be deleted before any real public deploy, per §9 Phase 2's original checkpoint |
+
+### 11.3 Migration phases
+
+**Phase 7 — Next.js migration (no Supabase yet)**
+Scaffold a fresh Next.js app (`create-next-app`, TS + Tailwind + App Router, no src dir), port every route/component 1:1 with the mapping above, convert navigation/active-route hooks per §11.1, add `"use client"` where needed, delete Vite-only files (`vite.config.ts`, `index.html`, `vercel.json`). `AppStateProvider` keeps working exactly as before — same in-memory seed, same reducer, same behavior. This phase is purely a framework swap; app behavior should be unchanged.
+**Checkpoint:** every route reachable, full `/` → `/today` flow works, and all Phase 3–6 checkpoints still pass (seed console-logs with 3 cycles and 40–45% correlation, daily log persists across navigation, PDF actually downloads, assistant guardrails — refusal + red-flag lockout — still work) — on Next.js instead of Vite.
+
+**Phase 8 — Supabase integration (deferred until Phase 7 is verified)**
+Create a Supabase project. Define tables mirroring `types.ts`: `symptom_entries`, `photos`, `cycle_events`, `medications`, `medication_doses`, `care_events`, `user_profiles` — every table with Row Level Security enabled, no policies, per the workshop's rule ("only our backend, using the secret key, can touch the data"). Add `lib/supabase.ts` (`import "server-only"` as the first line, client built from `SUPABASE_URL` + `SUPABASE_SECRET_KEY` env vars, never exposed to the browser). Replace — or progressively augment — the in-memory reducer with real reads (Server Components) and writes (Server Actions). The seed generator's role shifts from "initial app state" to "one-time DB seed script," or gets retired in favor of real logged data over time.
+**Checkpoint:** data survives a page refresh. (Explicitly the opposite of the original §2 hard constraint — see the note at the top of this section.)
+
+### 11.4 Open decisions for Phase 8 (not yet answered)
+
+- **Auth:** stay fake (any credentials pass) for the hackathon demo, or wire real Supabase Auth?
+- **Single- vs multi-user:** the workshop guide recommends a single-user, no-accounts "version 1" as the fastest safe shape. Vyrelith already has a full fake-auth flow (§6 Phase 6) — decide whether to keep that flow cosmetic (UI only, no real per-user data isolation) or make it real.
+- **Assistant:** stays pure canned-response (§8's guardrails, no live LLM call) unless explicitly revisited — a real LLM call would need those guardrails re-implemented as system prompting + moderation, which is a real safety/design project on its own, not a config change.
