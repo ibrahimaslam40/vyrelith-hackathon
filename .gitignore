@@ -12,6 +12,18 @@ dist
 dist-ssr
 *.local
 
+# next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# env files — never commit secrets (e.g. SUPABASE_SECRET_KEY)
+.env*
+
+# vercel
+.vercel
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
