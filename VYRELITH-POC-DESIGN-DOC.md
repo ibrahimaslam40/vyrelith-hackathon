@@ -352,30 +352,27 @@ For each later phase, the same pattern: name the phase, point at the section, fo
 
 ---
 
-## 11. Hackathon migration — Next.js + Supabase
+## 11. Phase 7–8 — Next.js + Supabase
 
-This repo (`vyrelith-hackathon`) is a fork of the original Vyrelith POC (Phases 1–6 above, already complete), created to satisfy a hackathon whose technical framework is **Next.js App Router + Supabase**, with the database secret key kept server-side only (per the workshop's `CLASS-GUIDE.md`). The original POC was built as a **Vite SPA with no server runtime** — this section documents what that mismatch requires.
+Phases 1–6 above cover the app itself: taxonomy, data model, daily log, insight screens, auth flow, assistant. Phases 7–8 put it on a real stack — Next.js App Router on the frontend, Supabase for the database — with the database secret key kept server-side only.
 
-**This reverses a stated hard constraint from §2.** The original POC's non-negotiable was "no `localStorage`, no `sessionStorage`, no `IndexedDB`. All state in memory. Refresh resets to seed." — deliberate, because the demo was meant to stay free of stored health data. The hackathon backend intentionally does the opposite: real persistence, in a real database. That's a conscious reversal for this phase of the project, not an oversight.
+**Persistence changes from §2's original framing.** §2 describes an in-memory-only POC mode ("refresh resets to seed") for a stored-data-free demo. Phases 7–8 intentionally move to real persistence in a real database — that's the point of building the backend, not an inconsistency.
 
-### 11.1 What changes (Next.js migration)
+### 11.1 Stack for Phase 7
 
-| Area | Before (Vite) | After (Next.js) |
-|---|---|---|
-| Framework | Vite + React 18 | Next.js (App Router) + React 18 |
-| Routing | react-router-dom, `src/routes/*.tsx` + `<Routes>` in `App.tsx` | File-based: `app/<route>/page.tsx` |
-| Navigation | `useNavigate()`, `<Link to>` | `useRouter()` / `<Link href>` from `next/navigation`, `next/link` |
-| Tab bar active-route detection | `useLocation()` | `usePathname()` from `next/navigation` |
-| Root wrapper | `Shell` inside `App.tsx` inside `main.tsx` | `app/layout.tsx` (root layout), still wraps `AppStateProvider` + `Shell` |
-| Dev-only console guard | `import.meta.env.DEV` | `process.env.NODE_ENV === 'development'` |
-| SPA fallback routing | `vercel.json` rewrite (`/(.*) → /index.html`) | Not needed — delete `vercel.json` |
-| File structure | `src/{routes,components,data,state,types.ts,utils}` | `app/`, `components/`, `data/`, `state/`, `types.ts`, `utils/` at project root (no `src/`), plus new `lib/supabase.ts` |
-| Build config | `vite.config.ts`, `index.html` | `next.config.js`, no `index.html` |
-| Deps removed | `vite`, `@vitejs/plugin-react`, `react-router-dom` | — |
-| Deps added | — | `next` |
-| Client interactivity | Implicit — everything is client-side in a Vite SPA | Explicit — every component using hooks/state/events needs `"use client"` at the top. In practice this is nearly every existing route, since almost all of them use `useState`/`useReducer`/context. |
+| Area | Choice |
+|---|---|
+| Framework | Next.js (App Router) + React 19 |
+| Routing | File-based: `app/<route>/page.tsx` |
+| Navigation | `useRouter()` / `<Link href>` from `next/navigation`, `next/link` |
+| Tab bar active-route detection | `usePathname()` from `next/navigation` |
+| Root wrapper | `app/layout.tsx` (root layout), wraps `AppStateProvider` + `Shell` |
+| Dev-only console guard | `process.env.NODE_ENV === 'development'` |
+| Styling | Tailwind v4, CSS-based `@theme` config carrying the same `vyr` palette/type scale/radius tokens from §3 |
+| File structure | `app/`, `components/`, `data/`, `state/`, `types.ts`, `utils/` at project root, plus `lib/supabase.ts` once Phase 8 starts |
+| Client interactivity | Every component using hooks/state/events gets `"use client"` at the top. In practice this is nearly every route, since almost all of them use `useState`/`useReducer`/context. |
 
-**Kept as-is:** TypeScript, Tailwind CSS (same `vyr` palette/config from §3), Recharts, date-fns, lucide-react, html2canvas + jsPDF, the full data model (`types.ts`), the symptom taxonomy (§4), all UI components (`Card`, `Button`, `Chip`, `GroupRow`, etc. — these don't care what router renders them), the derived selectors (`state/selectors.ts`), and the seed generator logic (§7) — at least until Supabase replaces in-memory state in Phase 8.
+**Carried through unchanged:** TypeScript, Recharts, date-fns, lucide-react, html2canvas + jsPDF, the full data model (`types.ts`), the symptom taxonomy (§4), all UI components (`Card`, `Button`, `Chip`, `GroupRow`, etc.), the derived selectors (`state/selectors.ts`), and the seed generator logic (§7) — at least until Supabase replaces in-memory state in Phase 8.
 
 ### 11.2 Route → file mapping
 
@@ -398,15 +395,15 @@ This repo (`vyrelith-hackathon`) is a fork of the original Vyrelith POC (Phases 
 | `/settings` | `app/settings/page.tsx` |
 | `/kitchen-sink` (dev only) | `app/kitchen-sink/page.tsx` — still must be deleted before any real public deploy, per §9 Phase 2's original checkpoint |
 
-### 11.3 Migration phases
+### 11.3 Phase breakdown
 
-**Phase 7 — Next.js migration (no Supabase yet)**
-Scaffold a fresh Next.js app (`create-next-app`, TS + Tailwind + App Router, no src dir), port every route/component 1:1 with the mapping above, convert navigation/active-route hooks per §11.1, add `"use client"` where needed, delete Vite-only files (`vite.config.ts`, `index.html`, `vercel.json`). `AppStateProvider` keeps working exactly as before — same in-memory seed, same reducer, same behavior. This phase is purely a framework swap; app behavior should be unchanged.
-**Checkpoint:** every route reachable, full `/` → `/today` flow works, and all Phase 3–6 checkpoints still pass (seed console-logs with 3 cycles and 40–45% correlation, daily log persists across navigation, PDF actually downloads, assistant guardrails — refusal + red-flag lockout — still work) — on Next.js instead of Vite.
+**Phase 7 — Next.js App Router**
+Build the app on Next.js (`create-next-app`, TS + Tailwind + App Router, no src dir): every route from the mapping above, navigation/active-route hooks per §11.1, `"use client"` where needed. `AppStateProvider` keeps working exactly as in Phases 1–6 — same in-memory seed, same reducer, same behavior — persistence isn't part of this phase.
+**Checkpoint:** every route reachable, full `/` → `/today` flow works, and all Phase 3–6 checkpoints still pass (seed console-logs with 3 cycles and 40–45% correlation, daily log persists across navigation, PDF actually downloads, assistant guardrails — refusal + red-flag lockout — still work).
 
-**Phase 8 — Supabase integration (deferred until Phase 7 is verified)**
+**Phase 8 — Supabase integration (after Phase 7 is verified)**
 Create a Supabase project. Define tables mirroring `types.ts`: `symptom_entries`, `photos`, `cycle_events`, `medications`, `medication_doses`, `care_events`, `user_profiles` — every table with Row Level Security enabled, no policies, per the workshop's rule ("only our backend, using the secret key, can touch the data"). Add `lib/supabase.ts` (`import "server-only"` as the first line, client built from `SUPABASE_URL` + `SUPABASE_SECRET_KEY` env vars, never exposed to the browser). Replace — or progressively augment — the in-memory reducer with real reads (Server Components) and writes (Server Actions). The seed generator's role shifts from "initial app state" to "one-time DB seed script," or gets retired in favor of real logged data over time.
-**Checkpoint:** data survives a page refresh. (Explicitly the opposite of the original §2 hard constraint — see the note at the top of this section.)
+**Checkpoint:** data survives a page refresh.
 
 ### 11.4 Open decisions for Phase 8 (not yet answered)
 

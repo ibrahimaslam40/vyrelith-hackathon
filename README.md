@@ -1,32 +1,24 @@
-# React + TypeScript + Vite
+# Vyrelith
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A symptom-tracking app for women with autoimmune conditions. Captures daily symptoms across eight body systems, overlays them against menstrual cycle and medication timing, records the diagnostic journey, and generates a one-page summary for appointments.
 
-Currently, two official plugins are available:
+Built in phases:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. **Scaffold** — Next.js App Router, TypeScript, Tailwind CSS
+2. **Design system** — shared components, `vyr` color palette, type scale
+3. **Data layer** — symptom taxonomy, data model, seeded demo data, derived insights (flare detection, cycle correlation, medication response)
+4. **Daily log** — the core logging screen: eight symptom groups, body map, severity sliders, photo capture
+5. **Insight screens** — Today, Timeline, Cycle overlay, Photo log, Medications, Care journey, Visit summary with PDF export
+6. **Auth, assistant, polish** — sign in/up flow, consent, onboarding, an in-app assistant with built-in safety guardrails (no diagnosis, red-flag handling), settings
+7. **Backend** — Next.js App Router with a Supabase-backed database
 
-## React Compiler
+See `VYRELITH-POC-DESIGN-DOC.md` for the full design spec and build plan.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Running locally
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Open [http://localhost:3000](http://localhost:3000).
