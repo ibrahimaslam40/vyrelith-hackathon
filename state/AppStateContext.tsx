@@ -3,12 +3,15 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useReducer,
+  useRef,
   type Dispatch,
   type ReactNode,
 } from 'react'
-import { generateSeed, type SeedData } from '../data/seed'
+import type { SeedData } from '../data/seed'
 import { getCycleCorrelation } from './selectors'
+import * as actions from '../lib/actions'
 import type {
   CareEvent,
   CycleEvent,
@@ -128,30 +131,77 @@ function reducer(state: AppState, action: Action): AppState {
 const StateContext = createContext<AppState | null>(null)
 const DispatchContext = createContext<Dispatch<Action> | null>(null)
 
-export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, () => {
-    const seed = generateSeed(new Date())
+// Fire the matching Server Action for an action so it's persisted to
+// Supabase, on top of the reducer's local optimistic update. Errors are
+// logged rather than surfaced — a failed persist shouldn't roll back UI
+// state the user already saw applied.
+function persist(action: Action) {
+  const run = (p: Promise<unknown>) =>
+    p.catch((err) => console.error('[Vyrelith] persist failed', action.type, err))
 
-    if (process.env.NODE_ENV === 'development') {
-      const periodStarts = seed.cycleEvents.filter((e) => e.type === 'period_start')
-      console.log('[Vyrelith] seed data', seed)
-      console.log('[Vyrelith] period_start count (expect 3):', periodStarts.length)
-      console.log(
-        '[Vyrelith] joint pain cycle correlation (expect 40-45%):',
-        getCycleCorrelation(seed.symptomEntries, seed.cycleEvents, 'pain'),
-      )
-      console.log(
-        '[Vyrelith] fatigue cycle correlation (expect 40-45%):',
-        getCycleCorrelation(seed.symptomEntries, seed.cycleEvents, 'energy'),
-      )
-    }
+  switch (action.type) {
+    case 'UPSERT_SYMPTOM_GROUP':
+      run(actions.upsertSymptomGroup(action.date, action.groupId, action.patch))
+      break
+    case 'SET_DAY_RATING':
+      run(actions.setDayRating(action.date, action.dayRating))
+      break
+    case 'ADD_CYCLE_EVENT':
+      run(actions.addCycleEvent(action.event))
+      break
+    case 'ADD_PHOTO':
+      run(actions.addPhoto(action.photo))
+      break
+    case 'ADD_CARE_EVENT':
+      run(actions.addCareEvent(action.event))
+      break
+    case 'LOG_MEDICATION_DOSE':
+      run(actions.logMedicationDose(action.dose))
+      break
+    case 'TOGGLE_MEDICATION_ACTIVE':
+      run(actions.toggleMedicationActive(action.medicationId))
+      break
+    case 'UPDATE_PROFILE':
+      run(actions.updateProfile(action.patch))
+      break
+    case 'RESET_ALL':
+      run(actions.resetAll())
+      break
+  }
+}
 
-    return seed
+export function AppStateProvider({
+  children,
+  initialState,
+}: {
+  children: ReactNode
+  initialState: SeedData
+}) {
+  const [state, rawDispatch] = useReducer(reducer, initialState)
+  const dispatchRef = useRef<Dispatch<Action>>((action) => {
+    rawDispatch(action)
+    persist(action)
   })
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+    const periodStarts = initialState.cycleEvents.filter((e) => e.type === 'period_start')
+    console.log('[Vyrelith] initial state (from Supabase)', initialState)
+    console.log('[Vyrelith] period_start count (expect 3):', periodStarts.length)
+    console.log(
+      '[Vyrelith] joint pain cycle correlation (expect 40-45%):',
+      getCycleCorrelation(initialState.symptomEntries, initialState.cycleEvents, 'pain'),
+    )
+    console.log(
+      '[Vyrelith] fatigue cycle correlation (expect 40-45%):',
+      getCycleCorrelation(initialState.symptomEntries, initialState.cycleEvents, 'energy'),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <StateContext.Provider value={state}>
-      <DispatchContext.Provider value={dispatch}>{children}</DispatchContext.Provider>
+      <DispatchContext.Provider value={dispatchRef.current}>{children}</DispatchContext.Provider>
     </StateContext.Provider>
   )
 }

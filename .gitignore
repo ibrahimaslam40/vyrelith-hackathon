@@ -20,6 +20,7 @@ next-env.d.ts
 
 # env files — never commit secrets (e.g. SUPABASE_SECRET_KEY)
 .env*
+!.env.example
 
 # vercel
 .vercel
