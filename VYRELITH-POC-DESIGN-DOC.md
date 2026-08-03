@@ -397,16 +397,24 @@ Phases 1–6 above cover the app itself: taxonomy, data model, daily log, insigh
 
 ### 11.3 Phase breakdown
 
-**Phase 7 — Next.js App Router**
+**Phase 7 — Next.js App Router — ✅ done**
 Build the app on Next.js (`create-next-app`, TS + Tailwind + App Router, no src dir): every route from the mapping above, navigation/active-route hooks per §11.1, `"use client"` where needed. `AppStateProvider` keeps working exactly as in Phases 1–6 — same in-memory seed, same reducer, same behavior — persistence isn't part of this phase.
-**Checkpoint:** every route reachable, full `/` → `/today` flow works, and all Phase 3–6 checkpoints still pass (seed console-logs with 3 cycles and 40–45% correlation, daily log persists across navigation, PDF actually downloads, assistant guardrails — refusal + red-flag lockout — still work).
+**Checkpoint:** every route reachable, full `/` → `/today` flow works, and all Phase 3–6 checkpoints still pass (seed console-logs with 3 cycles and 40–45% correlation, daily log persists across navigation, PDF actually downloads, assistant guardrails — refusal + red-flag lockout — still work). Verified on the live Vercel deploy, including a production-only React hydration mismatch (build-time "today" vs. real "today") fixed by rendering the whole app shell client-only (`next/dynamic({ ssr: false })`).
 
-**Phase 8 — Supabase integration (after Phase 7 is verified)**
-Create a Supabase project. Define tables mirroring `types.ts`: `symptom_entries`, `photos`, `cycle_events`, `medications`, `medication_doses`, `care_events`, `user_profiles` — every table with Row Level Security enabled, no policies, per the workshop's rule ("only our backend, using the secret key, can touch the data"). Add `lib/supabase.ts` (`import "server-only"` as the first line, client built from `SUPABASE_URL` + `SUPABASE_SECRET_KEY` env vars, never exposed to the browser). Replace — or progressively augment — the in-memory reducer with real reads (Server Components) and writes (Server Actions). The seed generator's role shifts from "initial app state" to "one-time DB seed script," or gets retired in favor of real logged data over time.
-**Checkpoint:** data survives a page refresh.
+**Phase 8 — Supabase integration — ✅ done**
+7 tables mirroring `types.ts` (`symptom_entries`, `photos`, `cycle_events`, `medications`, `medication_doses`, `care_events`, `user_profiles`), RLS enabled with no policies, `id` columns are `text` (not `uuid` — the app's ids are deterministic strings like `entry-2024-06-01`, not random UUIDs; the first schema pass got this wrong and every insert except `user_profiles` silently failed until caught). `lib/supabase.ts` is the server-only client (`SUPABASE_URL` + `SUPABASE_SECRET_KEY`, never exposed to the browser). `lib/data.ts` seeds the DB once on first request and reads full state per-request; `app/layout.tsx` exports `dynamic = 'force-dynamic'` so that fetch isn't frozen at build time. `lib/actions.ts` has one Server Action per reducer action type (including `resetAll` for Settings' "Delete everything"), wired into `state/AppStateContext.tsx`'s dispatch so every local reducer update also persists. Schema lives in `supabase/schema.sql`.
+**Checkpoint:** data survives a page refresh — verified locally and on the live Vercel deploy (env vars added in Vercel project settings).
 
-### 11.4 Open decisions for Phase 8 (not yet answered)
+### 11.4 Decisions made for Phase 8
 
-- **Auth:** stay fake (any credentials pass) for the hackathon demo, or wire real Supabase Auth?
-- **Single- vs multi-user:** the workshop guide recommends a single-user, no-accounts "version 1" as the fastest safe shape. Vyrelith already has a full fake-auth flow (§6 Phase 6) — decide whether to keep that flow cosmetic (UI only, no real per-user data isolation) or make it real.
-- **Assistant:** stays pure canned-response (§8's guardrails, no live LLM call) unless explicitly revisited — a real LLM call would need those guardrails re-implemented as system prompting + moderation, which is a real safety/design project on its own, not a config change.
+- **Auth:** stayed fake/cosmetic — untouched from Phase 6, not revisited.
+- **Single- vs multi-user:** went with the workshop guide's recommended single-user, no-accounts model. No `user_id` column on any table; `user_profiles` holds one fixed-id row (`profile-demo`).
+- **Assistant:** unchanged, still pure canned-response.
+
+### 11.5 Phase 9 — Post-launch polish (not in the original phase plan, done after Phase 8)
+
+- **Today page:** the "Last 7 days" sparkline had no axis/label; added a visible 0–10 axis and a caption. Added a Medications section — meds due today (via a new `isMedicationDueToday` selector covering all 5 cadences) with a working "Mark taken" button. `LOG_MEDICATION_DOSE` existed in the reducer and Server Action since Phase 8 but had no UI entry point until this.
+- **Timeline chart (`/insights`):** was 8 overlapping same-hue lines with a cramped legend. Replaced with a single-select `Chip` picker (one symptom group at a time) plus a "Severity (scale 1–10)" title; kept `connectNulls` on request so sparse groups still render as a continuous line rather than scattered dots.
+- **Insights → Patterns:** added a section of plain-language insight cards above the chart — cycle correlation (pain/fatigue vs. pre-period, via `getCycleCorrelation`) and medication response (via `getMedicationResponse`), both selectors that already existed but had nowhere to surface.
+- **Fixed orphaned routes:** `/insights/cycle`, `/insights/photos`, and `/meds` were fully built but unreachable from any navigation. `/insights` now links to all three.
+- **Still open / deferred to final review:** `/kitchen-sink` (dev-only component showcase) still needs deleting before any real public-facing use, per §9 Phase 2's original checkpoint.
